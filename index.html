@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f7f7f8;
+    --white: #ffffff;
+    --border: #e4e4e7;
+    --border-focus: #a1a1aa;
+    --text: #18181b;
+    --text-sub: #52525b;
+    --text-muted: #a1a1aa;
+    --accent-bg: #f4f4f5;
+    --green: #16a34a;
+    --green-bg: #f0fdf4;
+    --green-border: #bbf7d0;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --red-border: #fecaca;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Geist', -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 52px 24px 80px;
+  }
+
+  .header { margin-bottom: 36px; }
+  .header-title { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 3px; }
+  .header-sub { font-size: 13px; color: var(--text-muted); }
+
+  /* Card */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .card-num {
+    width: 20px; height: 20px;
+    background: var(--accent-bg);
+    border-radius: 50%;
+    font-size: 11px; font-weight: 600;
+    color: var(--text-sub);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-family: 'Geist Mono', monospace;
+  }
+
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+
+  .card-body { padding: 18px; }
+
+  /* Form */
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field { display: flex; flex-direction: column; }
+  .field + .field { margin-top: 0; }
+
+  label {
+    display: block;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+
+  select, input[type="date"] {
+    width: 100%; height: 36px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit; font-size: 13px;
+    padding: 0 10px;
+    outline: none;
+    transition: border-color 0.12s, box-shadow 0.12s;
+    appearance: none; -webkit-appearance: none;
+    cursor: pointer;
+  }
+
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23a1a1aa' d='M5 7L0 2h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 26px;
+  }
+
+  select:focus, input[type="date"]:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+  }
+
+  .entity-pill {
+    display: none; margin-top: 7px;
+    padding: 8px 11px;
+    background: var(--accent-bg);
+    border-radius: var(--radius);
+  }
+  .entity-pill.show { display: block; }
+  .entity-pill-name { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 1px; }
+  .entity-pill-iban { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text-muted); }
+
+  /* Template btn */
+  .template-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; color: var(--text-sub);
+    cursor: pointer; background: none;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 6px 11px; margin-bottom: 12px;
+    transition: all 0.12s; font-family: inherit;
+  }
+  .template-btn:hover { border-color: var(--border-focus); color: var(--text); background: var(--accent-bg); }
+
+  /* Upload */
+  .drop-zone {
+    position: relative;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius-lg);
+    padding: 28px 20px; text-align: center;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--border-focus); background: var(--bg); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+
+  .drop-icon {
+    width: 34px; height: 34px;
+    background: var(--accent-bg); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 9px; color: var(--text-sub);
+  }
+
+  .drop-title { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .drop-hint { font-size: 12px; color: var(--text-muted); }
+
+  /* Status */
+  .status {
+    display: none; align-items: center; gap: 6px;
+    margin-top: 9px; padding: 8px 11px; border-radius: var(--radius);
+    font-size: 12px; font-weight: 500;
+  }
+  .status.show { display: flex; }
+  .status.ok { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+  .status.bad { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+
+  .errs { display: none; flex-direction: column; gap: 3px; margin-top: 8px; }
+  .errs.show { display: flex; }
+  .err-row {
+    padding: 6px 11px;
+    background: var(--red-bg); border: 1px solid var(--red-border); border-radius: var(--radius);
+    font-size: 11px; color: var(--red); font-family: 'Geist Mono', monospace;
+  }
+
+  /* Table */
+  .tbl-wrap { display: none; margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; overflow-x: auto; }
+  .tbl-wrap.show { display: block; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg); }
+  th {
+    padding: 8px 13px; text-align: left;
+    font-size: 10px; font-weight: 600; color: var(--text-muted);
+    letter-spacing: 0.05em; text-transform: uppercase;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  td {
+    padding: 8px 13px; border-bottom: 1px solid var(--border);
+    color: var(--text-sub); font-size: 12px;
+    max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr.row-bad { background: var(--red-bg); }
+  tr.row-bad td { color: var(--red); }
+  td.ok { color: var(--green); font-weight: 600; }
+  td.bad { color: var(--red); font-weight: 600; }
+  td.mono { font-family: 'Geist Mono', monospace; }
+
+  /* Summary */
+  .summary { display: none; }
+  .summary.show { display: block; }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(3,1fr);
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden; margin-bottom: 12px;
+  }
+  .stat-grid .stat { padding: 14px 16px; border-right: 1px solid var(--border); background: var(--white); }
+  .stat-grid .stat:last-child { border-right: none; }
+  .stat-lbl { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+  .stat-val { font-size: 19px; font-weight: 600; color: var(--text); font-family: 'Geist Mono', monospace; letter-spacing: -0.02em; }
+
+  .meta {
+    border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 6px;
+  }
+  .meta-row {
+    display: flex; align-items: center;
+    padding: 9px 14px; border-bottom: 1px solid var(--border); gap: 12px;
+  }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-k { font-size: 12px; font-weight: 500; color: var(--text-muted); width: 120px; flex-shrink: 0; }
+  .meta-v { font-size: 12px; color: var(--text); font-family: 'Geist Mono', monospace; flex: 1; word-break: break-all; }
+
+  .regen {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text-muted); font-size: 12px; padding: 2px 7px;
+    cursor: pointer; transition: all 0.12s; font-family: inherit;
+  }
+  .regen:hover { border-color: var(--border-focus); color: var(--text); background: var(--accent-bg); }
+
+  .regen-note { font-size: 11px; color: var(--text-muted); margin: 6px 0 14px; }
+
+  /* Buttons */
+  .btn {
+    width: 100%; height: 38px; border: none; border-radius: var(--radius);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: all 0.12s;
+  }
+  .btn-primary { background: var(--text); color: white; }
+  .btn-primary:hover { background: #27272a; box-shadow: var(--shadow-md); }
+  .btn-ghost {
+    background: transparent; color: var(--text-sub);
+    border: 1px solid var(--border); margin-top: 7px;
+  }
+  .btn-ghost:hover { background: var(--accent-bg); border-color: var(--border-focus); color: var(--text); }
+
+  .placeholder { font-size: 13px; color: var(--text-muted); text-align: center; padding: 14px 0 2px; }
+
+  .footer { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 28px; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinning { display: inline-block; animation: spin 0.4s linear; }
+
+  @media (max-width: 520px) {
+    .field-row { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="header-title">Payment Generator</div>
+    <div class="header-sub">Generate Danske Bank XML files · SEPA pain.001.001.03</div>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-num">1</div>
+      <div class="card-title">Entity & execution date</div>
+    </div>
+    <div class="card-body">
+      <div class="field-row">
+        <div class="field">
+          <label>Legal entity</label>
+          <select id="entitySelect" onchange="onEntity()">
+            <option value="">Select entity…</option>
+            <option value="DE">VOI Technology Germany GmbH</option>
+            <option value="FR">Voi Technology SASU</option>
+          </select>
+          <div class="entity-pill" id="entityPill">
+            <div class="entity-pill-name" id="pillName"></div>
+            <div class="entity-pill-iban" id="pillIban"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Execution date</label>
+          <input type="date" id="execDate" onchange="tryRender()" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-num">2</div>
+      <div class="card-title">Upload payment data</div>
+    </div>
+    <div class="card-body">
+      <button class="template-btn" onclick="downloadTemplate()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+        Download Excel template
+      </button>
+
+      <div class="drop-zone" id="dropZone"
+        ondragover="dragOver(event)" ondragleave="dragLeave()" ondrop="onDrop(event)">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="onFile(event)" />
+        <div class="drop-icon">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12L8 8m4-4l4 4"/></svg>
+        </div>
+        <div class="drop-title">Drop file here or click to browse</div>
+        <div class="drop-hint">.xlsx · .xls · .csv</div>
+      </div>
+
+      <div class="status" id="statusEl"></div>
+      <div class="errs" id="errList"></div>
+      <div class="tbl-wrap" id="tblWrap">
+        <table>
+          <thead><tr><th>#</th><th>Recipient name</th><th>IBAN</th><th>Amount</th><th>Reference</th><th>Status</th></tr></thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-num">3</div>
+      <div class="card-title">Review & generate</div>
+    </div>
+    <div class="card-body">
+      <div class="placeholder" id="placeholder">Complete steps 1 and 2 to continue.</div>
+
+      <div class="summary" id="summary">
+        <div class="stat-grid">
+          <div class="stat"><div class="stat-lbl">Transactions</div><div class="stat-val" id="sCount">—</div></div>
+          <div class="stat"><div class="stat-lbl">Total</div><div class="stat-val" id="sTotal">—</div></div>
+          <div class="stat"><div class="stat-lbl">Currency</div><div class="stat-val" id="sCcy">EUR</div></div>
+        </div>
+
+        <div class="meta">
+          <div class="meta-row"><span class="meta-k">Entity</span><span class="meta-v" id="sEntity">—</span></div>
+          <div class="meta-row"><span class="meta-k">Execution date</span><span class="meta-v" id="sDate">—</span></div>
+          <div class="meta-row"><span class="meta-k">Debtor IBAN</span><span class="meta-v" id="sIban">—</span></div>
+          <div class="meta-row">
+            <span class="meta-k">Message ID</span>
+            <span class="meta-v" id="sMsgId">—</span>
+            <button class="regen" onclick="regenId()">↻ new</button>
+          </div>
+        </div>
+        <div class="regen-note">Regenerate message ID if the bank rejects the file as a duplicate</div>
+
+        <button class="btn btn-primary" onclick="generate()">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+          Download XML
+        </button>
+        <button class="btn btn-ghost" onclick="resetAll()">Start over</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">All processing happens in your browser — no data is sent anywhere.</div>
+</div>
+
+<script>
+const ENTITIES = {
+  DE: { name: 'VOI TECHNOLOGY GERMANY GMBH', iban: 'SE1512000000013990100173', bic: 'DABASESX', ccy: 'EUR' },
+  FR: { name: 'VOI TECHNOLOGY SASU', iban: 'SE7812000000013990100203', bic: 'DABASESX', ccy: 'EUR' }
+};
+
+let rows = [], msgId = '', hasErr = false;
+document.getElementById('execDate').valueAsDate = new Date();
+
+function makeMsgId() {
+  const n = new Date(), p = x => String(x).padStart(2,'0');
+  return `${n.getFullYear()}${p(n.getMonth()+1)}${p(n.getDate())}${p(n.getHours())}${p(n.getMinutes())}${p(n.getSeconds())}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
+}
+
+function regenId() {
+  msgId = makeMsgId();
+  document.getElementById('sMsgId').textContent = msgId;
+  const btn = document.querySelector('.regen');
+  btn.classList.add('spinning');
+  setTimeout(() => btn.classList.remove('spinning'), 400);
+}
+
+function onEntity() {
+  const v = document.getElementById('entitySelect').value;
+  const pill = document.getElementById('entityPill');
+  if (v) {
+    document.getElementById('pillName').textContent = ENTITIES[v].name;
+    document.getElementById('pillIban').textContent = ENTITIES[v].iban;
+    pill.classList.add('show');
+  } else { pill.classList.remove('show'); }
+  tryRender();
+}
+
+function validIBAN(s) {
+  const c = s.replace(/\s/g,'').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{1,30}$/.test(c)) return false;
+  const r = (c.slice(4)+c.slice(0,4)).split('').map(x=>isNaN(x)?x.charCodeAt(0)-55:x).join('');
+  let rem = 0; for (const d of r) rem = (rem*10+parseInt(d))%97;
+  return rem===1;
+}
+
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Recipient Name','Recipient IBAN','Amount','Payment Reference'],
+    ['Allianz Lebensversicherung','DE81600800000905226400',131.10,'AL-1790332838 John Doe'],
+    ['Example Recipient','DE12345678901234567890',250.00,'REF-12345 Jane Smith']
+  ]);
+  ws['!cols'] = [{wch:32},{wch:28},{wch:12},{wch:42}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+  XLSX.writeFile(wb, 'payment_template.xlsx');
+}
+
+function dragOver(e) { e.preventDefault(); document.getElementById('dropZone').classList.add('drag'); }
+function dragLeave() { document.getElementById('dropZone').classList.remove('drag'); }
+function onDrop(e) { e.preventDefault(); dragLeave(); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); }
+function onFile(e) { if (e.target.files[0]) readFile(e.target.files[0]); }
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:'' });
+      let data = raw;
+      if (raw[0]?.map(c=>String(c).toLowerCase()).some(c=>c.includes('name')||c.includes('iban'))) data = raw.slice(1);
+
+      rows = []; hasErr = false;
+      const errs = [];
+
+      data.forEach((row, i) => {
+        if (row.every(c=>c===''||c==null)) return;
+        const name = String(row[0]||'').trim();
+        const iban = String(row[1]||'').replace(/\s/g,'').toUpperCase();
+        const amount = parseFloat(row[2]);
+        const ref = String(row[3]||'').trim();
+        const e = [];
+        if (!name) e.push('Missing name');
+        if (!iban) e.push('Missing IBAN');
+        else if (!validIBAN(iban)) e.push('Invalid IBAN');
+        if (isNaN(amount)||amount<=0) e.push('Invalid amount');
+        if (!ref) e.push('Missing reference');
+        if (e.length) { hasErr = true; errs.push(`Row ${i+2}: ${e.join(', ')}`); }
+        rows.push({ name, iban, amount, ref, errs: e });
+      });
+
+      // Table
+      const tb = document.getElementById('tblBody');
+      tb.innerHTML = rows.map((r,i) => {
+        const s = r.iban.length>4 ? r.iban.slice(0,4)+'···'+r.iban.slice(-4) : r.iban;
+        const st = r.errs.length ? `<td class="bad">✗</td>` : `<td class="ok">✓</td>`;
+        return `<tr class="${r.errs.length?'row-bad':''}">
+          <td class="mono">${i+1}</td>
+          <td title="${r.name}">${r.name}</td>
+          <td class="mono">${s}</td>
+          <td class="mono">${isNaN(r.amount)?'—':r.amount.toFixed(2)}</td>
+          <td title="${r.ref}">${r.ref.length>28?r.ref.slice(0,28)+'…':r.ref}</td>
+          ${st}
+        </tr>`;
+      }).join('');
+      document.getElementById('tblWrap').classList.add('show');
+
+      // Errors
+      const el = document.getElementById('errList');
+      el.innerHTML = errs.map(e=>`<div class="err-row">${e}</div>`).join('');
+      el.classList.toggle('show', errs.length>0);
+
+      // Status
+      const s = document.getElementById('statusEl');
+      s.className = 'status show ' + (hasErr ? 'bad' : 'ok');
+      s.textContent = hasErr
+        ? `⚠ ${rows.length} rows loaded — ${errs.length} error(s). Fix before continuing.`
+        : `✓ ${rows.length} rows loaded — all valid`;
+
+      tryRender();
+    } catch { alert('Could not read file. Please use the provided template.'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function tryRender() {
+  const ek = document.getElementById('entitySelect').value;
+  const dt = document.getElementById('execDate').value;
+  const ok = ek && dt && rows.length>0 && !hasErr;
+  document.getElementById('placeholder').style.display = ok ? 'none' : 'block';
+  document.getElementById('summary').classList.toggle('show', ok);
+  if (!ok) return;
+  const ent = ENTITIES[ek];
+  const valid = rows.filter(r=>!r.errs.length);
+  const total = valid.reduce((s,r)=>s+r.amount, 0);
+  if (!msgId) msgId = makeMsgId();
+  document.getElementById('sCount').textContent = valid.length;
+  document.getElementById('sTotal').textContent = total.toFixed(2);
+  document.getElementById('sCcy').textContent = ent.ccy;
+  document.getElementById('sEntity').textContent = ent.name;
+  document.getElementById('sDate').textContent = dt;
+  document.getElementById('sIban').textContent = ent.iban;
+  document.getElementById('sMsgId').textContent = msgId;
+}
+
+function escXML(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+function generate() {
+  const ek = document.getElementById('entitySelect').value;
+  const dt = document.getElementById('execDate').value;
+  const ent = ENTITIES[ek];
+  const valid = rows.filter(r=>!r.errs.length);
+  const total = valid.reduce((s,r)=>s+r.amount,0);
+  const now = new Date().toISOString().replace(/\.\d+Z/,'.000Z');
+  const id = msgId;
+  const txns = valid.map((r,i) => {
+    const e2e = `${i+1}${id.replace(/-/g,'')}PP${i+1}`;
+    return `<CdtTrfTxInf><PmtId><EndToEndId>${e2e}</EndToEndId></PmtId><Amt><InstdAmt Ccy="${ent.ccy}">${r.amount.toFixed(2)}</InstdAmt></Amt><Cdtr><Nm>${escXML(r.name)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${r.iban}</IBAN></Id></CdtrAcct><Purp><Cd>SALA</Cd></Purp><RmtInf><Ustrd>${escXML(r.ref)}</Ustrd></RmtInf></CdtTrfTxInf>`;
+  }).join('');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03 pain.001.001.03.xsd">
+<CstmrCdtTrfInitn>
+<GrpHdr>
+<MsgId>${id}</MsgId>
+<CreDtTm>${now}</CreDtTm>
+<NbOfTxs>${valid.length}</NbOfTxs>
+<CtrlSum>${total.toFixed(2)}</CtrlSum>
+<InitgPty><Nm>${ent.name}</Nm></InitgPty>
+</GrpHdr>
+<PmtInf>
+<PmtInfId>${id}</PmtInfId>
+<PmtMtd>TRF</PmtMtd>
+<BtchBookg>true</BtchBookg>
+<NbOfTxs>${valid.length}</NbOfTxs>
+<CtrlSum>${total.toFixed(2)}</CtrlSum>
+<PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>
+<ReqdExctnDt>${dt}</ReqdExctnDt>
+<Dbtr><Nm>${ent.name}</Nm></Dbtr>
+<DbtrAcct><Id><IBAN>${ent.iban}</IBAN></Id></DbtrAcct>
+<DbtrAgt><FinInstnId><BIC>${ent.bic}</BIC></FinInstnId></DbtrAgt>
+<ChrgBr>SLEV</ChrgBr>
+${txns}
+</PmtInf>
+</CstmrCdtTrfInitn>
+</Document>`;
+
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([xml], {type:'application/xml'}));
+  a.download = `payment_${ek}_${dt.replace(/-/g,'')}_${id}.xml`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  msgId = makeMsgId();
+  document.getElementById('sMsgId').textContent = msgId;
+}
+
+function resetAll() {
+  document.getElementById('entitySelect').value = '';
+  document.getElementById('entityPill').classList.remove('show');
+  document.getElementById('execDate').valueAsDate = new Date();
+  document.getElementById('statusEl').className = 'status';
+  document.getElementById('errList').classList.remove('show');
+  document.getElementById('tblWrap').classList.remove('show');
+  document.getElementById('tblBody').innerHTML = '';
+  document.getElementById('summary').classList.remove('show');
+  document.getElementById('placeholder').style.display = 'block';
+  document.getElementById('fileInput').value = '';
+  rows = []; msgId = ''; hasErr = false;
+}
+</script>
+</body>
+</html>
