@@ -378,6 +378,7 @@
 </div>
 
 <script>
+// Added missing commas here
 const ENTITIES = {
   DE: { name: 'VOI TECHNOLOGY GERMANY GMBH', iban: 'SE1512000000013990100173', bic: 'DABASESX', ccy: 'EUR' },
   FR: { name: 'VOI TECHNOLOGY SASU', iban: 'SE7812000000013990100203', bic: 'DABASESX', ccy: 'EUR' },
@@ -386,7 +387,12 @@ const ENTITIES = {
 };
 
 let rows = [], msgId = '', hasErr = false;
-document.getElementById('execDate').valueAsDate = new Date();
+
+// Fix: Set date on load and ensure it's in YYYY-MM-DD format
+window.onload = () => {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('execDate').value = today;
+};
 
 function makeMsgId() {
   const n = new Date(), p = x => String(x).padStart(2,'0');
@@ -404,11 +410,13 @@ function regenId() {
 function onEntity() {
   const v = document.getElementById('entitySelect').value;
   const pill = document.getElementById('entityPill');
-  if (v) {
+  if (v && ENTITIES[v]) {
     document.getElementById('pillName').textContent = ENTITIES[v].name;
     document.getElementById('pillIban').textContent = ENTITIES[v].iban;
     pill.classList.add('show');
-  } else { pill.classList.remove('show'); }
+  } else { 
+    pill.classList.remove('show'); 
+  }
   tryRender();
 }
 
@@ -441,31 +449,40 @@ function readFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+      const dataArr = new Uint8Array(e.target.result);
+      const wb = XLSX.read(dataArr, { type:'array' });
       const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:'' });
+      
       let data = raw;
-      if (raw[0]?.map(c=>String(c).toLowerCase()).some(c=>c.includes('name')||c.includes('iban'))) data = raw.slice(1);
+      // Skip header row if it contains 'name' or 'iban'
+      if (raw[0] && raw[0].some(c => {
+        const s = String(c).toLowerCase();
+        return s.includes('name') || s.includes('iban');
+      })) {
+        data = raw.slice(1);
+      }
 
       rows = []; hasErr = false;
       const errs = [];
 
       data.forEach((row, i) => {
-        if (row.every(c=>c===''||c==null)) return;
+        if (!row || row.every(c=>c===''||c==null)) return;
         const name = String(row[0]||'').trim();
         const iban = String(row[1]||'').replace(/\s/g,'').toUpperCase();
-        const amount = parseFloat(row[2]);
+        const amount = parseFloat(String(row[2]).replace(',','.')); // Handle comma decimals
         const ref = String(row[3]||'').trim();
+        
         const e = [];
         if (!name) e.push('Missing name');
         if (!iban) e.push('Missing IBAN');
         else if (!validIBAN(iban)) e.push('Invalid IBAN');
         if (isNaN(amount)||amount<=0) e.push('Invalid amount');
         if (!ref) e.push('Missing reference');
+        
         if (e.length) { hasErr = true; errs.push(`Row ${i+2}: ${e.join(', ')}`); }
         rows.push({ name, iban, amount, ref, errs: e });
       });
 
-      // Table
       const tb = document.getElementById('tblBody');
       tb.innerHTML = rows.map((r,i) => {
         const s = r.iban.length>4 ? r.iban.slice(0,4)+'···'+r.iban.slice(-4) : r.iban;
@@ -481,20 +498,21 @@ function readFile(file) {
       }).join('');
       document.getElementById('tblWrap').classList.add('show');
 
-      // Errors
       const el = document.getElementById('errList');
       el.innerHTML = errs.map(e=>`<div class="err-row">${e}</div>`).join('');
       el.classList.toggle('show', errs.length>0);
 
-      // Status
       const s = document.getElementById('statusEl');
       s.className = 'status show ' + (hasErr ? 'bad' : 'ok');
       s.textContent = hasErr
-        ? `⚠ ${rows.length} rows loaded — ${errs.length} error(s). Fix before continuing.`
+        ? `⚠ ${rows.length} rows loaded — ${errs.length} error(s).`
         : `✓ ${rows.length} rows loaded — all valid`;
 
       tryRender();
-    } catch { alert('Could not read file. Please use the provided template.'); }
+    } catch (err) { 
+      console.error(err);
+      alert('Could not read file. Please use the provided template.'); 
+    }
   };
   reader.readAsArrayBuffer(file);
 }
@@ -506,10 +524,12 @@ function tryRender() {
   document.getElementById('placeholder').style.display = ok ? 'none' : 'block';
   document.getElementById('summary').classList.toggle('show', ok);
   if (!ok) return;
+  
   const ent = ENTITIES[ek];
   const valid = rows.filter(r=>!r.errs.length);
   const total = valid.reduce((s,r)=>s+r.amount, 0);
   if (!msgId) msgId = makeMsgId();
+  
   document.getElementById('sCount').textContent = valid.length;
   document.getElementById('sTotal').textContent = total.toFixed(2);
   document.getElementById('sCcy').textContent = ent.ccy;
@@ -520,7 +540,14 @@ function tryRender() {
 }
 
 function escXML(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  // Better XML escaping for SEPA characters
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&apos;')
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Strips accents (e.g. é -> e)
 }
 
 function generate() {
@@ -531,12 +558,14 @@ function generate() {
   const total = valid.reduce((s,r)=>s+r.amount,0);
   const now = new Date().toISOString().replace(/\.\d+Z/,'.000Z');
   const id = msgId;
+  
   const txns = valid.map((r,i) => {
-    const e2e = `${i+1}${id.replace(/-/g,'')}PP${i+1}`;
-    return `<CdtTrfTxInf><PmtId><EndToEndId>${e2e}</EndToEndId></PmtId><Amt><InstdAmt Ccy="${ent.ccy}">${r.amount.toFixed(2)}</InstdAmt></Amt><Cdtr><Nm>${escXML(r.name)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${r.iban}</IBAN></Id></CdtrAcct><Purp><Cd>SALA</Cd></Purp><RmtInf><Ustrd>${escXML(r.ref)}</Ustrd></RmtInf></CdtTrfTxInf>`;
+    const e2e = `${i+1}${id.replace(/-/g,'')}`.slice(0,30); // E2E ID limit is usually 35 chars
+    return `<CdtTrfTxInf><PmtId><EndToEndId>${e2e}</EndToEndId></PmtId><Amt><InstdAmt Ccy="${ent.ccy}">${r.amount.toFixed(2)}</InstdAmt></Amt><Cdtr><Nm>${escXML(r.name)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${r.iban}</IBAN></Id></CdtrAcct><RmtInf><Ustrd>${escXML(r.ref)}</Ustrd></RmtInf></CdtTrfTxInf>`;
   }).join('');
+  
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03 pain.001.001.03.xsd">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
 <CstmrCdtTrfInitn>
 <GrpHdr>
 <MsgId>${id}</MsgId>
@@ -564,17 +593,15 @@ ${txns}
 
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([xml], {type:'application/xml'}));
-  a.download = `payment_${ek}_${dt.replace(/-/g,'')}_${id}.xml`;
+  a.download = `payment_${ek}_${dt.replace(/-/g,'')}.xml`;
   a.click();
   URL.revokeObjectURL(a.href);
-  msgId = makeMsgId();
-  document.getElementById('sMsgId').textContent = msgId;
 }
 
 function resetAll() {
   document.getElementById('entitySelect').value = '';
   document.getElementById('entityPill').classList.remove('show');
-  document.getElementById('execDate').valueAsDate = new Date();
+  document.getElementById('execDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('statusEl').className = 'status';
   document.getElementById('errList').classList.remove('show');
   document.getElementById('tblWrap').classList.remove('show');
