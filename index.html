@@ -729,11 +729,13 @@ function generateUKCSV() {
     const creditAccount = normSortCode(r.sortCode) + r.accountNo;
     const amount = r.amount.toFixed(2);
     // Truncate fields to spec limits
-    const beneNameRaw = r.name.replace(/"/g,'').slice(0,18);
-    const refRaw = r.ref.replace(/"/g,'').slice(0,18);
-    const senderName = ent.name.slice(0,18);
-    // Fields: Command, Version, OrderingAccount, BacsNo, BeneficiaryAccount, Amount, Date, Currency, PaymentType, BeneficiaryName, SenderStatement, PaymentRef, Sender
-    return `"CMGB","1.0","${debitAccount}","","${creditAccount}","${amount}","${dateStr}","GBP","F","${beneNameRaw}","","${refRaw}","${senderName}"`;
+    const beneNameRaw = r.name.replace(/"/g,'').slice(0,18);  // Field 10: Beneficiary name
+    const senderText  = r.ref.replace(/"/g,'').slice(0,18);   // Field 11: Sender statement (e.g. "Salary May 2026")
+    const beneText    = 'Salary';                              // Field 12: Beneficiary statement text (always "Salary")
+    const senderName  = ent.name.replace(/"/g,'').slice(0,18);// Field 17: Sender name
+    // CMGB 1.0 field order: Command, Version, OrderingAccount, BacsNo, BeneficiaryAccount,
+    // Amount, Date, Currency, PaymentType, BeneficiaryName, SenderStatement, PaymentRef, SenderName
+    return `"CMGB","1.0","${debitAccount}","","${creditAccount}","${amount}","${dateStr}","GBP","F","${beneNameRaw}","${senderText}","${beneText}","${senderName}"`;
   });
 
   const csv = lines.join('\n');
