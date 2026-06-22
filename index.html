@@ -515,11 +515,32 @@ function validIBAN(s) {
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
   if (isUK()) {
-    const ws = XLSX.utils.aoa_to_sheet([
+    // Build sheet manually so we can set Sort Code and Account Number columns as Text
+    // This prevents Excel from stripping leading zeros (e.g. 01234567 → 1234567)
+    const data = [
       ['Recipient Name', 'Sort Code', 'Account Number', 'Amount', 'Payment Reference'],
-      ['John Smith',     '30-96-26',  '12345678',       1250.00,  'MAY25 SALARY'],
+      ['John Smith',     '30-96-26',  '01234567',       1250.00,  'MAY25 SALARY'],
       ['Jane Doe',       '20-11-03',  '87654321',       1800.50,  'MAY25 SALARY']
-    ]);
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Force Sort Code (col B) and Account Number (col C) to Text format for all data rows
+    // This ensures Excel doesn't strip leading zeros when users paste values
+    const textFmt = '@'; // '@' is Excel's Text number format
+    for (let row = 1; row <= 100; row++) {
+      const sortCell = XLSX.utils.encode_cell({r: row, c: 1}); // col B
+      const acctCell = XLSX.utils.encode_cell({r: row, c: 2}); // col C
+      if (!ws[sortCell]) ws[sortCell] = {t:'s', v:''};
+      if (!ws[acctCell]) ws[acctCell] = {t:'s', v:''};
+      ws[sortCell].z = textFmt;
+      ws[acctCell].z = textFmt;
+      // Ensure example values are stored as strings not numbers
+      if (row === 1) { ws[sortCell] = {t:'s', v:'30-96-26', z: textFmt}; }
+      if (row === 1) { ws[acctCell] = {t:'s', v:'01234567', z: textFmt}; }
+      if (row === 2) { ws[sortCell] = {t:'s', v:'20-11-03', z: textFmt}; }
+      if (row === 2) { ws[acctCell] = {t:'s', v:'87654321', z: textFmt}; }
+    }
+
     ws['!cols'] = [{wch:30},{wch:12},{wch:16},{wch:12},{wch:40}];
     XLSX.utils.book_append_sheet(wb, ws, 'Payments');
     XLSX.writeFile(wb, 'payment_template_UK.xlsx');
