@@ -24,6 +24,9 @@
     --red: #dc2626;
     --red-bg: #fef2f2;
     --red-border: #fecaca;
+    --blue: #2563eb;
+    --blue-bg: #eff6ff;
+    --blue-border: #bfdbfe;
     --radius: 8px;
     --radius-lg: 12px;
     --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
@@ -129,6 +132,21 @@
   .entity-pill.show { display: block; }
   .entity-pill-name { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 1px; }
   .entity-pill-iban { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text-muted); }
+
+  /* UK notice banner */
+  .uk-notice {
+    display: none;
+    margin-top: 10px;
+    padding: 9px 12px;
+    background: var(--blue-bg);
+    border: 1px solid var(--blue-border);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--blue);
+    line-height: 1.5;
+  }
+  .uk-notice.show { display: block; }
+  .uk-notice strong { font-weight: 600; }
 
   /* Template btn */
   .template-btn {
@@ -271,7 +289,7 @@
 
   <div class="header">
     <div class="header-title">Payment Generator</div>
-    <div class="header-sub">Generate Danske Bank XML files · SEPA pain.001.001.03</div>
+    <div class="header-sub">Generate Danske Bank payment files · SEPA pain.001.001.03 &amp; UK CSV (BACS/FPS)</div>
   </div>
 
   <!-- Step 1 -->
@@ -293,11 +311,16 @@
             <option value="FI">Voi Technology Finland AB</option>
             <option value="PL">VOI Technology Poland</option>
             <option value="BE">VOI Technology Belgium</option>
-           <option value="ES">VOI Technology SL</option>
+            <option value="ES">VOI Technology SL</option>
+            <option value="GB">Voi Technology UK Ltd</option>
           </select>
           <div class="entity-pill" id="entityPill">
             <div class="entity-pill-name" id="pillName"></div>
             <div class="entity-pill-iban" id="pillIban"></div>
+          </div>
+          <!-- UK-specific notice -->
+          <div class="uk-notice" id="ukNotice">
+            <strong>UK payroll mode</strong> — generates a Danske Bank CSV file (CMGB 1.0) using Sort Code + Account Number. Payment type: Faster Payment (F). Currency: GBP.
           </div>
         </div>
         <div class="field">
@@ -317,7 +340,7 @@
     <div class="card-body">
       <button class="template-btn" onclick="downloadTemplate()">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
-        Download Excel template
+        <span id="templateBtnLabel">Download Excel template</span>
       </button>
 
       <div class="drop-zone" id="dropZone"
@@ -334,7 +357,9 @@
       <div class="errs" id="errList"></div>
       <div class="tbl-wrap" id="tblWrap">
         <table>
-          <thead><tr><th>#</th><th>Recipient name</th><th>IBAN</th><th>Amount</th><th>Reference</th><th>Status</th></tr></thead>
+          <thead id="tblHead">
+            <tr><th>#</th><th>Recipient name</th><th id="thAccount">IBAN</th><th>Amount</th><th>Reference</th><th>Status</th></tr>
+          </thead>
           <tbody id="tblBody"></tbody>
         </table>
       </div>
@@ -360,18 +385,22 @@
         <div class="meta">
           <div class="meta-row"><span class="meta-k">Entity</span><span class="meta-v" id="sEntity">—</span></div>
           <div class="meta-row"><span class="meta-k">Execution date</span><span class="meta-v" id="sDate">—</span></div>
-          <div class="meta-row"><span class="meta-k">Debtor IBAN</span><span class="meta-v" id="sIban">—</span></div>
-          <div class="meta-row">
+          <div class="meta-row"><span class="meta-k" id="sDebtorLabel">Debtor IBAN</span><span class="meta-v" id="sIban">—</span></div>
+          <div class="meta-row" id="sMsgIdRow">
             <span class="meta-k">Message ID</span>
             <span class="meta-v" id="sMsgId">—</span>
             <button class="regen" onclick="regenId()">↻ new</button>
           </div>
+          <div class="meta-row" id="sFileTypeRow" style="display:none">
+            <span class="meta-k">File format</span>
+            <span class="meta-v" id="sFileType">—</span>
+          </div>
         </div>
-        <div class="regen-note">Regenerate message ID if the bank rejects the file as a duplicate</div>
+        <div class="regen-note" id="regenNote">Regenerate message ID if the bank rejects the file as a duplicate</div>
 
         <button class="btn btn-primary" onclick="generate()">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
-          Download XML
+          <span id="generateBtnLabel">Download XML</span>
         </button>
         <button class="btn btn-ghost" onclick="resetAll()">Start over</button>
       </div>
@@ -382,21 +411,24 @@
 </div>
 
 <script>
-// Added missing commas here
 const ENTITIES = {
-  DE: { name: 'VOI TECHNOLOGY GERMANY GMBH', iban: 'SE1512000000013990100173', bic: 'DABASESX', ccy: 'EUR' },
-  FR: { name: 'VOI TECHNOLOGY SASU', iban: 'SE7812000000013990100203', bic: 'DABASESX', ccy: 'EUR' },
-  NL: { name: 'VOI TECHNOLOGY NETHERLANDS B.V', iban: 'SE9012000000013990100181', bic: 'DABASESX', ccy: 'EUR' },
-  IT: { name: 'VOI TECHNOLOGY ITALIA S.R.L', iban: 'SE8112000000013990100246', bic: 'DABASESX', ccy: 'EUR' },
-  FI: { name: 'VOI TECHNOLOGY FINLAND AB', iban: 'FI9181619710008524', bic: 'DABAFIHH', ccy: 'EUR' },
-  PL: { name: 'VOI TECHNOLOGY POLAND', iban: 'PL41236000050000004550509091', bic: 'DABAPLPW', ccy: 'PLN' },
-  BE: { name: 'VOI TECHNOLOGY BELGIUM', iban: 'SE5612000000013990100211', bic: 'DABASESX', ccy: 'EUR' },
-  ES: { name: 'VOI TECHNOLOGY SL', iban: 'SE0612000000013990100238', bic: 'DABASESX', ccy: 'EUR' }
+  DE: { name: 'VOI TECHNOLOGY GERMANY GMBH',      iban: 'SE1512000000013990100173', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  FR: { name: 'VOI TECHNOLOGY SASU',               iban: 'SE7812000000013990100203', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  NL: { name: 'VOI TECHNOLOGY NETHERLANDS B.V',    iban: 'SE9012000000013990100181', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  IT: { name: 'VOI TECHNOLOGY ITALIA S.R.L',       iban: 'SE8112000000013990100246', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  FI: { name: 'VOI TECHNOLOGY FINLAND AB',         iban: 'FI9181619710008524',        bic: 'DABAFIHH', ccy: 'EUR', uk: false },
+  PL: { name: 'VOI TECHNOLOGY POLAND',             iban: 'PL41236000050000004550509091', bic: 'DABAPLPW', ccy: 'PLN', uk: false },
+  BE: { name: 'VOI TECHNOLOGY BELGIUM',            iban: 'SE5612000000013990100211', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  ES: { name: 'VOI TECHNOLOGY SL',                 iban: 'SE0612000000013990100238', bic: 'DABASESX', ccy: 'EUR', uk: false },
+  GB: { name: 'VOI TECHNOLOGY UK LTD',             iban: 'GB25DABA30128122043161', bic: 'DABAGB2L', sortCode: '30-12-81', accountNo: '22043161', ccy: 'GBP', uk: true }
 };
 
 let rows = [], msgId = '', hasErr = false;
 
-// Fix: Set date on load and ensure it's in YYYY-MM-DD format
+function isUK() {
+  return document.getElementById('entitySelect').value === 'GB';
+}
+
 window.onload = () => {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('execDate').value = today;
@@ -418,14 +450,58 @@ function regenId() {
 function onEntity() {
   const v = document.getElementById('entitySelect').value;
   const pill = document.getElementById('entityPill');
+  const ukNotice = document.getElementById('ukNotice');
+
   if (v && ENTITIES[v]) {
-    document.getElementById('pillName').textContent = ENTITIES[v].name;
-    document.getElementById('pillIban').textContent = ENTITIES[v].iban;
+    const ent = ENTITIES[v];
+    document.getElementById('pillName').textContent = ent.name;
+    document.getElementById('pillIban').textContent = ent.uk
+      ? `${ent.iban}  ·  Sort Code: ${ent.sortCode}  ·  Account: ${ent.accountNo}`
+      : ent.iban;
     pill.classList.add('show');
-  } else { 
-    pill.classList.remove('show'); 
+    ukNotice.classList.toggle('show', !!ent.uk);
+  } else {
+    pill.classList.remove('show');
+    ukNotice.classList.remove('show');
   }
+
+  // Update UI for UK vs SEPA
+  updateUIMode();
+
+  // Re-validate rows if already loaded
+  if (rows.length > 0) revalidateRows();
   tryRender();
+}
+
+function updateUIMode() {
+  const uk = isUK();
+  // Table header
+  document.getElementById('thAccount').textContent = uk ? 'Sort Code / Account' : 'IBAN';
+  // Template button label
+  document.getElementById('templateBtnLabel').textContent = uk
+    ? 'Download UK Excel template'
+    : 'Download Excel template';
+  // Generate button label
+  document.getElementById('generateBtnLabel').textContent = uk ? 'Download CSV' : 'Download XML';
+  // Summary labels
+  document.getElementById('sDebtorLabel').textContent = uk ? 'Debtor account' : 'Debtor IBAN';
+  // Show file type row for UK, hide msgId row for UK
+  document.getElementById('sMsgIdRow').style.display = uk ? 'none' : '';
+  document.getElementById('sFileTypeRow').style.display = uk ? '' : 'none';
+  document.getElementById('regenNote').style.display = uk ? 'none' : '';
+  if (uk) {
+    document.getElementById('sFileType').textContent = 'Danske Bank CSV (CMGB 1.0) · Faster Payment';
+  }
+}
+
+// Sort code: 6 digits, optionally with dashes (XX-XX-XX or XXXXXX)
+function validSortCode(s) {
+  return /^\d{2}-?\d{2}-?\d{2}$/.test(s.trim());
+}
+
+// UK account number: 8 digits
+function validAccountNo(s) {
+  return /^\d{8}$/.test(s.trim().replace(/\s/g,''));
 }
 
 function validIBAN(s) {
@@ -438,20 +514,92 @@ function validIBAN(s) {
 
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['Recipient Name','Recipient IBAN','Amount','Payment Reference'],
-    ['Allianz Lebensversicherung','DE81600800000905226400',131.10,'AL-1790332838 John Doe'],
-    ['Example Recipient','DE12345678901234567890',250.00,'REF-12345 Jane Smith']
-  ]);
-  ws['!cols'] = [{wch:32},{wch:28},{wch:12},{wch:42}];
-  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
-  XLSX.writeFile(wb, 'payment_template.xlsx');
+  if (isUK()) {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Recipient Name', 'Sort Code', 'Account Number', 'Amount', 'Payment Reference'],
+      ['John Smith',     '30-96-26',  '12345678',       1250.00,  'MAY25 SALARY'],
+      ['Jane Doe',       '20-11-03',  '87654321',       1800.50,  'MAY25 SALARY']
+    ]);
+    ws['!cols'] = [{wch:30},{wch:12},{wch:16},{wch:12},{wch:40}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+    XLSX.writeFile(wb, 'payment_template_UK.xlsx');
+  } else {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Recipient Name','Recipient IBAN','Amount','Payment Reference'],
+      ['Allianz Lebensversicherung','DE81600800000905226400',131.10,'AL-1790332838 John Doe'],
+      ['Example Recipient','DE12345678901234567890',250.00,'REF-12345 Jane Smith']
+    ]);
+    ws['!cols'] = [{wch:32},{wch:28},{wch:12},{wch:42}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+    XLSX.writeFile(wb, 'payment_template.xlsx');
+  }
 }
 
 function dragOver(e) { e.preventDefault(); document.getElementById('dropZone').classList.add('drag'); }
 function dragLeave() { document.getElementById('dropZone').classList.remove('drag'); }
 function onDrop(e) { e.preventDefault(); dragLeave(); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); }
 function onFile(e) { if (e.target.files[0]) readFile(e.target.files[0]); }
+
+function revalidateRows() {
+  // Re-run validation on already-parsed rows when entity changes
+  if (!rows.length) return;
+  const uk = isUK();
+  rows.forEach(r => {
+    r.errs = [];
+    if (!r.name) r.errs.push('Missing name');
+    if (uk) {
+      if (!r.sortCode) r.errs.push('Missing sort code');
+      else if (!validSortCode(r.sortCode)) r.errs.push('Invalid sort code (XX-XX-XX)');
+      if (!r.accountNo) r.errs.push('Missing account number');
+      else if (!validAccountNo(r.accountNo)) r.errs.push('Invalid account number (8 digits)');
+    } else {
+      if (!r.iban) r.errs.push('Missing IBAN');
+      else if (!validIBAN(r.iban)) r.errs.push('Invalid IBAN');
+    }
+    if (isNaN(r.amount) || r.amount <= 0) r.errs.push('Invalid amount');
+    if (!r.ref) r.errs.push('Missing reference');
+  });
+  hasErr = rows.some(r => r.errs.length > 0);
+  renderTable();
+}
+
+function renderTable() {
+  const uk = isUK();
+  const tb = document.getElementById('tblBody');
+  tb.innerHTML = rows.map((r, i) => {
+    let accountCell;
+    if (uk) {
+      accountCell = `<td class="mono">${r.sortCode || '—'} / ${r.accountNo || '—'}</td>`;
+    } else {
+      const s = r.iban && r.iban.length > 4 ? r.iban.slice(0,4)+'···'+r.iban.slice(-4) : (r.iban || '—');
+      accountCell = `<td class="mono">${s}</td>`;
+    }
+    const st = r.errs.length ? `<td class="bad">✗</td>` : `<td class="ok">✓</td>`;
+    return `<tr class="${r.errs.length?'row-bad':''}">
+      <td class="mono">${i+1}</td>
+      <td title="${r.name}">${r.name}</td>
+      ${accountCell}
+      <td class="mono">${isNaN(r.amount)?'—':r.amount.toFixed(2)}</td>
+      <td title="${r.ref}">${r.ref.length>28?r.ref.slice(0,28)+'…':r.ref}</td>
+      ${st}
+    </tr>`;
+  }).join('');
+  document.getElementById('tblWrap').classList.add('show');
+
+  const errs = rows.filter(r=>r.errs.length).map((r,_) => {
+    const idx = rows.indexOf(r);
+    return `Row ${idx+2}: ${r.errs.join(', ')}`;
+  });
+  const el = document.getElementById('errList');
+  el.innerHTML = errs.map(e=>`<div class="err-row">${e}</div>`).join('');
+  el.classList.toggle('show', errs.length>0);
+
+  const s = document.getElementById('statusEl');
+  s.className = 'status show ' + (hasErr ? 'bad' : 'ok');
+  s.textContent = hasErr
+    ? `⚠ ${rows.length} rows loaded — ${errs.length} error(s).`
+    : `✓ ${rows.length} rows loaded — all valid`;
+}
 
 function readFile(file) {
   const reader = new FileReader();
@@ -460,66 +608,66 @@ function readFile(file) {
       const dataArr = new Uint8Array(e.target.result);
       const wb = XLSX.read(dataArr, { type:'array' });
       const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:'' });
-      
+
+      const uk = isUK();
+
       let data = raw;
-      // Skip header row if it contains 'name' or 'iban'
+      // Skip header row if it looks like a header
       if (raw[0] && raw[0].some(c => {
         const s = String(c).toLowerCase();
-        return s.includes('name') || s.includes('iban');
+        return s.includes('name') || s.includes('iban') || s.includes('sort') || s.includes('account');
       })) {
         data = raw.slice(1);
       }
 
       rows = []; hasErr = false;
-      const errs = [];
 
       data.forEach((row, i) => {
         if (!row || row.every(c=>c===''||c==null)) return;
-        const name = String(row[0]||'').trim();
-        const iban = String(row[1]||'').replace(/\s/g,'').toUpperCase();
-        const amount = parseFloat(String(row[2]).replace(',','.')); // Handle comma decimals
-        const ref = String(row[3]||'').trim();
-        
-        const e = [];
-        if (!name) e.push('Missing name');
-        if (!iban) e.push('Missing IBAN');
-        else if (!validIBAN(iban)) e.push('Invalid IBAN');
-        if (isNaN(amount)||amount<=0) e.push('Invalid amount');
-        if (!ref) e.push('Missing reference');
-        
-        if (e.length) { hasErr = true; errs.push(`Row ${i+2}: ${e.join(', ')}`); }
-        rows.push({ name, iban, amount, ref, errs: e });
+
+        if (uk) {
+          // UK columns: Name | Sort Code | Account Number | Amount | Reference
+          const name     = String(row[0]||'').trim();
+          const sortCode = String(row[1]||'').trim();
+          const accountNo= String(row[2]||'').replace(/\s/g,'');
+          const amount   = parseFloat(String(row[3]).replace(',','.'));
+          const ref      = String(row[4]||'').trim();
+
+          const errs = [];
+          if (!name) errs.push('Missing name');
+          if (!sortCode) errs.push('Missing sort code');
+          else if (!validSortCode(sortCode)) errs.push('Invalid sort code (XX-XX-XX)');
+          if (!accountNo) errs.push('Missing account number');
+          else if (!validAccountNo(accountNo)) errs.push('Invalid account number (8 digits)');
+          if (isNaN(amount)||amount<=0) errs.push('Invalid amount');
+          if (!ref) errs.push('Missing reference');
+
+          if (errs.length) hasErr = true;
+          rows.push({ name, sortCode, accountNo, iban: '', amount, ref, errs });
+        } else {
+          // SEPA columns: Name | IBAN | Amount | Reference
+          const name   = String(row[0]||'').trim();
+          const iban   = String(row[1]||'').replace(/\s/g,'').toUpperCase();
+          const amount = parseFloat(String(row[2]).replace(',','.'));
+          const ref    = String(row[3]||'').trim();
+
+          const errs = [];
+          if (!name) errs.push('Missing name');
+          if (!iban) errs.push('Missing IBAN');
+          else if (!validIBAN(iban)) errs.push('Invalid IBAN');
+          if (isNaN(amount)||amount<=0) errs.push('Invalid amount');
+          if (!ref) errs.push('Missing reference');
+
+          if (errs.length) hasErr = true;
+          rows.push({ name, sortCode: '', accountNo: '', iban, amount, ref, errs });
+        }
       });
 
-      const tb = document.getElementById('tblBody');
-      tb.innerHTML = rows.map((r,i) => {
-        const s = r.iban.length>4 ? r.iban.slice(0,4)+'···'+r.iban.slice(-4) : r.iban;
-        const st = r.errs.length ? `<td class="bad">✗</td>` : `<td class="ok">✓</td>`;
-        return `<tr class="${r.errs.length?'row-bad':''}">
-          <td class="mono">${i+1}</td>
-          <td title="${r.name}">${r.name}</td>
-          <td class="mono">${s}</td>
-          <td class="mono">${isNaN(r.amount)?'—':r.amount.toFixed(2)}</td>
-          <td title="${r.ref}">${r.ref.length>28?r.ref.slice(0,28)+'…':r.ref}</td>
-          ${st}
-        </tr>`;
-      }).join('');
-      document.getElementById('tblWrap').classList.add('show');
-
-      const el = document.getElementById('errList');
-      el.innerHTML = errs.map(e=>`<div class="err-row">${e}</div>`).join('');
-      el.classList.toggle('show', errs.length>0);
-
-      const s = document.getElementById('statusEl');
-      s.className = 'status show ' + (hasErr ? 'bad' : 'ok');
-      s.textContent = hasErr
-        ? `⚠ ${rows.length} rows loaded — ${errs.length} error(s).`
-        : `✓ ${rows.length} rows loaded — all valid`;
-
+      renderTable();
       tryRender();
-    } catch (err) { 
+    } catch (err) {
       console.error(err);
-      alert('Could not read file. Please use the provided template.'); 
+      alert('Could not read file. Please use the provided template.');
     }
   };
   reader.readAsArrayBuffer(file);
@@ -532,33 +680,72 @@ function tryRender() {
   document.getElementById('placeholder').style.display = ok ? 'none' : 'block';
   document.getElementById('summary').classList.toggle('show', ok);
   if (!ok) return;
-  
+
   const ent = ENTITIES[ek];
   const valid = rows.filter(r=>!r.errs.length);
   const total = valid.reduce((s,r)=>s+r.amount, 0);
   if (!msgId) msgId = makeMsgId();
-  
+
   document.getElementById('sCount').textContent = valid.length;
   document.getElementById('sTotal').textContent = total.toFixed(2);
   document.getElementById('sCcy').textContent = ent.ccy;
   document.getElementById('sEntity').textContent = ent.name;
   document.getElementById('sDate').textContent = dt;
-  document.getElementById('sIban').textContent = ent.iban;
+  document.getElementById('sIban').textContent = ent.uk
+    ? `${ent.iban}  (${ent.sortCode} / ${ent.accountNo})`
+    : ent.iban;
   document.getElementById('sMsgId').textContent = msgId;
 }
 
 function escXML(s) {
-  // Better XML escaping for SEPA characters
   return String(s)
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&apos;')
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Strips accents (e.g. é -> e)
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function generate() {
+// Normalise sort code to XXXXXX (no dashes)
+function normSortCode(s) {
+  return s.replace(/-/g,'');
+}
+
+function generateUKCSV() {
+  const ek = document.getElementById('entitySelect').value;
+  const dt = document.getElementById('execDate').value;
+  const ent = ENTITIES[ek];
+  const valid = rows.filter(r=>!r.errs.length);
+
+  // Format date as DDMMYYYY
+  const [y,m,d] = dt.split('-');
+  const dateStr = `${d}${m}${y}`;
+
+  // Debit account: sort code + account number concatenated (14 chars)
+  const debitAccount = normSortCode(ent.sortCode) + ent.accountNo;
+
+  const lines = valid.map(r => {
+    const creditAccount = normSortCode(r.sortCode) + r.accountNo;
+    const amount = r.amount.toFixed(2);
+    // Truncate fields to spec limits
+    const beneNameRaw = r.name.replace(/"/g,'').slice(0,18);
+    const refRaw = r.ref.replace(/"/g,'').slice(0,18);
+    const senderName = ent.name.slice(0,18);
+    // Fields: Command, Version, OrderingAccount, BacsNo, BeneficiaryAccount, Amount, Date, Currency, PaymentType, BeneficiaryName, SenderStatement, PaymentRef, Sender
+    return `"CMGB","1.0","${debitAccount}","","${creditAccount}","${amount}","${dateStr}","GBP","F","${beneNameRaw}","","${refRaw}","${senderName}"`;
+  });
+
+  const csv = lines.join('\n');
+  const filename = `payment_GB_${dt.replace(/-/g,'')}.csv`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function generateSEPAXML() {
   const ek = document.getElementById('entitySelect').value;
   const dt = document.getElementById('execDate').value;
   const ent = ENTITIES[ek];
@@ -566,12 +753,12 @@ function generate() {
   const total = valid.reduce((s,r)=>s+r.amount,0);
   const now = new Date().toISOString().replace(/\.\d+Z/,'.000Z');
   const id = msgId;
-  
+
   const txns = valid.map((r,i) => {
-    const e2e = `${i+1}${id.replace(/-/g,'')}`.slice(0,30); // E2E ID limit is usually 35 chars
+    const e2e = `${i+1}${id.replace(/-/g,'')}`.slice(0,30);
     return `<CdtTrfTxInf><PmtId><EndToEndId>${e2e}</EndToEndId></PmtId><Amt><InstdAmt Ccy="${ent.ccy}">${r.amount.toFixed(2)}</InstdAmt></Amt><Cdtr><Nm>${escXML(r.name)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${r.iban}</IBAN></Id></CdtrAcct><RmtInf><Ustrd>${escXML(r.ref)}</Ustrd></RmtInf></CdtTrfTxInf>`;
   }).join('');
-  
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
 <CstmrCdtTrfInitn>
@@ -606,9 +793,18 @@ ${txns}
   URL.revokeObjectURL(a.href);
 }
 
+function generate() {
+  if (isUK()) {
+    generateUKCSV();
+  } else {
+    generateSEPAXML();
+  }
+}
+
 function resetAll() {
   document.getElementById('entitySelect').value = '';
   document.getElementById('entityPill').classList.remove('show');
+  document.getElementById('ukNotice').classList.remove('show');
   document.getElementById('execDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('statusEl').className = 'status';
   document.getElementById('errList').classList.remove('show');
@@ -618,6 +814,7 @@ function resetAll() {
   document.getElementById('placeholder').style.display = 'block';
   document.getElementById('fileInput').value = '';
   rows = []; msgId = ''; hasErr = false;
+  updateUIMode();
 }
 </script>
 </body>
