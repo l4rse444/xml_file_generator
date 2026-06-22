@@ -725,21 +725,25 @@ function generateUKCSV() {
   // Debit account: sort code + account number concatenated (14 chars)
   const debitAccount = normSortCode(ent.sortCode) + ent.accountNo;
   const senderName   = ent.name.replace(/"/g,'').slice(0,18);
-  const total        = valid.reduce((s,r) => s + r.amount, 0).toFixed(2);
 
   const lines = [];
 
   // CMGBD - one debit record for the whole batch
-  // Fields: Command, Version, OrderingAccount, BacsNo, (skip 5-6 credit fields), Date, (skip 8-10), SenderStatement, (skip 12-16), SenderName, TechnicalRef, ElectronicMsg
-  lines.push(`"CMGBD","1.0","${debitAccount}","","${dateStr}","","","","","Salary"`);
+  // Field order per example: Command, Version, OrderingAccount, BacsNo(empty for F),
+  // F5-F10 empty, SenderStatement(F11), F12-F17 empty, TechnicalRef(F18), ElectronicMsg(F19),
+  // trailing comma
+  lines.push(`"CMGBD","1.0","${debitAccount}","","","","","","","","Salary","","","","","","","","",`);
 
   // CMGBC - one credit record per recipient
-  valid.forEach(r => {
+  // Field order per example: Command, Version, F3-F4 empty, BeneficiaryAccount, Amount,
+  // Date(empty), Currency, PaymentType, BeneficiaryName, SenderStatement(empty F11),
+  // PaymentRef(empty F12), F13-F16 empty, RemittersName(F17), TechRef(F18), F19 empty, trailing comma
+  valid.forEach((r, i) => {
     const creditAccount = normSortCode(r.sortCode) + r.accountNo;
     const amount        = r.amount.toFixed(2);
-    const beneName      = r.name.replace(/"/g,'').slice(0,18);  // Field 10: Beneficiary name, max 18
-    // Fields: Command, Version, (skip 3-4 debit fields), BeneficiaryAccount, Amount, (skip 7 date), Currency, PaymentType, BeneficiaryName, (skip 11 sender stmt), PaymentRef, (skip 13-16), SenderName
-    lines.push(`"CMGBC","1.0","","","${creditAccount}","${amount}","","GBP","F","${beneName}","","","${senderName}"`);
+    const beneName      = r.name.replace(/"/g,'').slice(0,18);
+    const techRef       = `SAL${String(i+1).padStart(3,'0')}${dt.replace(/-/g,'')}`.slice(0,35);
+    lines.push(`"CMGBC","1.0","","","${creditAccount}","${amount}","","GBP","F","${beneName}","","","","","","","${senderName}","${techRef}","",`);
   });
 
   const csv = lines.join('\n');
