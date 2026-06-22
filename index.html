@@ -735,7 +735,7 @@ function generateUKCSV() {
     const senderName  = ent.name.replace(/"/g,'').slice(0,18);// Field 17: Sender name
     // CMGB 1.0 field order: Command, Version, OrderingAccount, BacsNo, BeneficiaryAccount,
     // Amount, Date, Currency, PaymentType, BeneficiaryName, SenderStatement, PaymentRef, SenderName
-    return `"CMGB","1.0","${debitAccount}","","${creditAccount}","${amount}","${dateStr}","GBP","F","${beneNameRaw}","${senderText}","","${senderName}"`;
+    return `"CMGB","1.0","${debitAccount}","","${creditAccount}","${amount}","${dateStr}","GBP","F","${beneNameRaw}","${senderText}","Salary","${senderName}"`;
   });
 
   const csv = lines.join('\n');
