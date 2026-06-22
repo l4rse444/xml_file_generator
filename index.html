@@ -736,14 +736,16 @@ function generateUKCSV() {
 
   // CMGBC - one credit record per recipient
   // Field order per example: Command, Version, F3-F4 empty, BeneficiaryAccount, Amount,
-  // Date(empty), Currency, PaymentType, BeneficiaryName, SenderStatement(empty F11),
-  // PaymentRef(empty F12), F13-F16 empty, RemittersName(F17), TechRef(F18), F19 empty, trailing comma
+  // Date(empty), Currency, PaymentType, BeneficiaryName, SenderStatement(F11),
+  // PaymentRef(F12), F13-F16 empty, RemittersName(F17), TechRef(F18), F19 empty, trailing comma
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const salaryMonth = `Salary ${months[parseInt(m)-1]} ${y}`.slice(0,18); // e.g. "Salary June 2026"
   valid.forEach((r, i) => {
     const creditAccount = normSortCode(r.sortCode) + r.accountNo;
     const amount        = r.amount.toFixed(2);
     const beneName      = r.name.replace(/"/g,'').slice(0,18);
     const techRef       = `SAL${String(i+1).padStart(3,'0')}${dt.replace(/-/g,'')}`.slice(0,35);
-    lines.push(`"CMGBC","1.0","","","${creditAccount}","${amount}","","GBP","F","${beneName}","","","","","","","${senderName}","${techRef}","",`);
+    lines.push(`"CMGBC","1.0","","","${creditAccount}","${amount}","","GBP","F","${beneName}","Salary","${salaryMonth}","","","","","${senderName}","${techRef}","",`);
   });
 
   const csv = lines.join('\n');
