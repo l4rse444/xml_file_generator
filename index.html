@@ -735,7 +735,7 @@ function generateUKCSV() {
   const ent = ENTITIES[ek];
   const valid = rows.filter(r=>!r.errs.length);
 
-  // Format date as DDMMYYYY
+  // Format date as DDMMYYYY (Field 7 on CMGBD expects this format)
   const [y,m,d] = dt.split('-');
   const dateStr = `${d}${m}${y}`;
 
@@ -746,15 +746,17 @@ function generateUKCSV() {
   const lines = [];
 
   // CMGBD - one debit record for the whole batch
-  // Field order per example: Command, Version, OrderingAccount, BacsNo(empty for F),
-  // F5-F10 empty, SenderStatement(F11), F12-F17 empty, TechnicalRef(F18), ElectronicMsg(F19),
-  // trailing comma
-  lines.push(`"CMGBD","1.0","${debitAccount}","","","","","","","","Salary","","","","","","","","",`);
+  // Fields: F1=Command, F2=Version, F3=OrderingAccount, F4=BacsNo(empty),
+  // F5-F6=CMGBC-only(empty), F7=PaymentDate, F8-F10=CMGBC-only(empty),
+  // F11=SenderStatement, F12-F16=empty, F17=CMGBC-only(empty),
+  // F18=TechnicalRef(empty), F19=ElectronicMsg(empty), trailing comma
+  lines.push(`"CMGBD","1.0","${debitAccount}","","","","${dateStr}","","","","Salary","","","","","","","","",`);
 
   // CMGBC - one credit record per recipient
-  // Field order per example: Command, Version, F3-F4 empty, BeneficiaryAccount, Amount,
-  // Date(empty), Currency, PaymentType, BeneficiaryName, SenderStatement(F11),
-  // PaymentRef(F12), F13-F16 empty, RemittersName(F17), TechRef(F18), F19 empty, trailing comma
+  // Fields: F1=Command, F2=Version, F3-F4=CMGBD-only(empty), F5=BeneficiaryAccount,
+  // F6=Amount, F7=CMGBD-only(empty), F8=Currency, F9=PaymentType, F10=BeneficiaryName,
+  // F11=SenderStatement, F12=PaymentRef(salaryMonth), F13-F16=empty,
+  // F17=RemittersName, F18=TechRef, F19=empty, trailing comma
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const salaryMonth = `Salary ${months[parseInt(m)-1]} ${y}`.slice(0,18); // e.g. "Salary June 2026"
   valid.forEach((r, i) => {
